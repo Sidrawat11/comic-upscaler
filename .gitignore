@@ -1,0 +1,30 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.DS_Store
+
+# Manhwa content - never commit
+The Legend of the Northern Blade/
+*.cbz
+*.zip
+*.rar
+
+# Temp & logs (we don't want these in Git)
+TempExtract/
+upscaled/
+Log/
+*.log
+
+# Big binaries & weights (we'll handle them separately)
+Real-ESRGAN/weights/*
+Real-ESRGAN/experiments/*
+*.pth
+*.pth.*
+
+# Editor junk
+.vscode/
+.idea/
