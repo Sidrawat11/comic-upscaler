@@ -87,11 +87,8 @@ def process_chapter(cbz_path, scale, upsampler, chapter_temp_dir):
         output_filename = f.replace('.jpg', '.png')
         output_path = os.path.join(chapter_temp_dir, output_filename)
         upscale_Image(upsampler, scale, input_path, output_path)
-        
 
-# Inside your chunking loop, before upsampler.enhance:
 def sharpen_input(img):
-    # This makes the ink lines "pop" so the AI sees them as hard edges
     gaussian = cv2.GaussianBlur(img, (0, 0), 2.0)
     return cv2.addWeighted(img, 1.5, gaussian, -0.5, 0)
 
@@ -108,43 +105,34 @@ def upscale_Image(upsampler, scale, input_path, output_path):
     for start_y in range(0, img_h, chunk_size - overlap):
         end_y = min(start_y + chunk_size, img_h)
         
-        # 2. Extract chunk
         chunk = img_np[start_y:end_y, :]
 
         chunk_to_process = sharpen_input(chunk.astype(np.uint8))
 
-        # 3. Enhance (Explicitly pass as uint8 to fix the green normalization bug)
-        # The 'enhance' function handles internal normalization correctly if input is uint8
         output, _ = upsampler.enhance(chunk_to_process.astype(np.uint8), outscale=scale)
 
-        # 2. Math upscale (pixelated but contains all original scan texture)
         math_upscale = cv2.resize(chunk, (output.shape[1], output.shape[0]), interpolation=cv2.INTER_LANCZOS4)
 
-        # 3. Blend them (80% AI for cleanliness, 20% Math for texture/grit)
         final_output = cv2.addWeighted(output, 0.8, math_upscale, 0.2, 0)
         
-        # 4. Handle Overlap properly
-        # If overlap is 64 and scale is 4, overlap_scaled is 256
         overlap_scaled = int(overlap * scale)
 
         if start_y > 0:
-            # We take the middle of the overlap to ensure the best detail
-            # This removes the "edge artifacts" where the model had less context
+
             cut_off = overlap_scaled // 2
             output = output[cut_off:, :]
 
-        # IMPORTANT: You must also trim the BOTTOM of the chunk 
-        # except for the very last piece, otherwise you're still double-stacking
         if end_y < img_h:
             cut_off_bottom = overlap_scaled // 2
             output = output[:-cut_off_bottom, :]
             
         up_chunks.append(output)
 
-    # 5. Stitch and Save
     final_img = np.concatenate(up_chunks, axis=0)
     cv2.imwrite(os.path.join(output_path), final_img)
 
+## This function is modeled after checkyKeys of basicsr util
+## I did not want to deal with version incompatibilities.
 def loadModel(net, loadnet):
     # 1. Prepare for mapping
     model_state = net.state_dict()
@@ -188,7 +176,6 @@ def process_all_chapters(scale):
     net.load_state_dict(state_dict, strict=False)
     net.eval().to('cuda')
     upsampler = RealESRGANer(scale=4, model_path=MODEL_PATH, model=net, tile=0, tile_pad=10, pre_pad=0, half=False, gpu_id=0)
-
     total_start = time.time()
 
     for f in cbz_files:
