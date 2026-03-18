@@ -14,8 +14,6 @@ Built from scratch as a learning project in ML inference, image processing, and 
 |---|---|
 | Blurry line art, compression artifacts, banding | Sharp lines, clean gradients, readable text |
 
-*Add your own comparison screenshots here.*
-
 ---
 
 ## Features
@@ -241,6 +239,7 @@ Started as a 180-line monolithic script (preserved in `legacy/mvp_upscaler.py`) 
 - [x] Post-sharpen + black area fix
 - [x] Batch processing with resume
 - [x] Cloud GPU deployment
+- [ ] A GUI comparer to compare upscaled vs original.
 - [ ] Edge-aware sharpening (sharpen lines, preserve flat areas)
 - [ ] GPU batching (multiple images per inference call)
 - [ ] Write own inference wrapper (replace Real-ESRGAN dependency)
