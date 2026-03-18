@@ -20,7 +20,7 @@ Log/
 *.log
 
 # Big binaries & weights (we'll handle them separately)
-Reak-ESRGAN/
+Real-ESRGAN/
 Real-ESRGAN/weights/*
 Real-ESRGAN/experiments/*
 *.pth

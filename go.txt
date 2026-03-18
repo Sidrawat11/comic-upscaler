@@ -1,0 +1,198 @@
+Let me create an architecture blueprint for you.There's your visual overview. Now let me walk through each module's **interface** — meaning what goes in, what comes out, and *why* it's shaped that way.
+
+## config.py — Single Source of Truth
+
+Right now your constants are hardcoded at the top of `mvp_upscaler.py`. That works for one file, but once you have 4-5 modules, you'd be duplicating paths everywhere. `config.py` holds every setting in one place. If you move your project to a different machine, or change the model, or switch from JPEG to PNG output — one file to edit.
+
+The key insight: **config doesn't do anything.** It has no functions, no logic. It's just named values. Think of it as the settings menu of your application.
+
+```
+Holds:
+  - Paths (root, model, chapter folder, output folder)
+  - Engine settings (scale=2, half=True, tile_size=512, 
+    chunk_size=720, overlap=128, ratio_threshold=2.5)
+  - Output settings (format='jpg', quality=92, skip_last_pages=2)
+  - cudnn.benchmark flag
+```
+
+## extractor.py — CBZ → Images
+
+This module's only job: open a CBZ, give back images. The key design decision is making it a **generator** (using `yield`) instead of returning a list.
+
+Right now your code extracts ALL images to disk, then reads them all. That means every image exists in memory or on disk simultaneously. A generator instead says: "here's the first image... done with it? okay here's the second one." Only one image in memory at a time.
+
+```
+Input:  cbz_path (string)
+Output: yields (filename, numpy_array) pairs one at a time
+
+Example flow:
+  for filename, image in extract_images("chapter_109.cbz"):
+      # you get one image at a time
+      # previous image can be garbage collected
+```
+
+The term **generator** in Python: a function that uses `yield` instead of `return`. When you call it, it doesn't run — it returns an iterator. Each time you ask for the next item (via a `for` loop), it runs until it hits `yield`, hands you the value, then *pauses*. Next iteration, it resumes where it left off. This means it never loads all 40 images at once.
+
+No more `TempExtract` folder. No more `wipe_temp_extract()`. No more renaming files on disk. The CBZ is read directly from the zip into numpy arrays in memory.
+
+## engine.py — Image → Upscaled Image
+
+This is where all the ML intelligence lives, wrapped in a **class**. 
+
+A class here makes sense because of **state that needs to persist** — the loaded model. Loading UltraSharp takes a few seconds and a chunk of VRAM. You do it once, then reuse it for hundreds of images. The class holds that loaded model as instance state.
+
+```
+UpscaleEngine class:
+
+  __init__(model_path, scale, half, tile_size, chunk_size, overlap):
+      - Loads model weights (your brute-force mapper)
+      - Moves model to GPU
+      - Creates RealESRGANer upsampler
+      - Sets cudnn.benchmark = True
+      - Model stays loaded for the lifetime of the object
+
+  upscale(image: numpy_array) -> numpy_array:
+      - Checks aspect ratio (height / width)
+      - If ratio < 2.5: direct pass (let RealESRGAN tile internally)
+      - If ratio >= 2.5: manual vertical chunking with your overlap logic
+      - Applies post-sharpen on the final result
+      - Returns the upscaled image
+      
+  _direct_upscale(image) -> numpy_array:
+      - Calls upsampler.enhance() with tile=512
+      - For "normal" shaped images
+      
+  _chunked_upscale(image) -> numpy_array:
+      - Your vertical chunking logic (cleaned up)
+      - For tall scroll panels
+      
+  _post_sharpen(image) -> numpy_array:
+      - Gentle unsharp mask on the finished upscale
+      - Preserves Northern Blade's line art grit
+```
+
+The underscore prefix on `_direct_upscale`, `_chunked_upscale`, `_post_sharpen` is a Python convention meaning **private** — these are internal methods that only the class itself calls. Outside code just calls `upscale()` and doesn't need to know or care whether it chunked or not. This is called **encapsulation** — hiding the internal complexity behind a simple interface.
+
+## packager.py — Images → CBZ
+
+This replaces your `zip_to_cbz` function and eliminates the temp folder entirely.
+
+```
+CBZPackager class:
+
+  __init__(output_path, img_format='jpg', quality=92):
+      - Opens a zipfile for writing
+      
+  add_image(filename, numpy_array):
+      - Encodes image to JPEG bytes in memory (cv2.imencode)
+      - Writes bytes directly into zip (zipfile.writestr)
+      - No temp file ever touches disk
+      
+  add_raw(filename, raw_bytes):
+      - For credit pages you skip upscaling
+      - Just dumps the original bytes straight into the zip
+      
+  close():
+      - Closes the zipfile
+      - Final CBZ is the ONLY file written to disk
+```
+
+The class here is a **context manager** pattern — you could make it work with Python's `with` statement so it auto-closes even if something crashes midway. This prevents corrupted half-written CBZ files.
+
+## pipeline.py — The Conductor
+
+This is the only module that knows about the full workflow. It imports and coordinates everything else.
+
+```
+process_chapter(cbz_path, engine, output_path):
+    1. Create packager for output_path
+    2. For each (filename, image) from extractor:
+       a. If it's a skip page (last N) → packager.add_raw()
+       b. Else → engine.upscale(image) → packager.add_image()
+       c. Log timing per image
+    3. Close packager
+    4. Return chapter stats (time, page count, output size)
+
+process_all(chapter_folder, engine, output_folder):
+    1. List all CBZ files
+    2. For each CBZ → process_chapter()
+    3. Log total stats
+```
+
+Notice how clean this reads. The pipeline doesn't know about RRDBNet, or chunk sizes, or JPEG encoding, or zip internals. It just says "extract, upscale, package." If you showed this function to someone who'd never seen your code, they'd understand the workflow in 10 seconds. That's the goal of good architecture.
+
+## How Data Flows
+
+Here's the complete lifecycle of a single page:
+
+```
+CBZ file on disk
+  → extractor reads zip entry, decodes JPEG → numpy array (in memory)
+    → pipeline passes array to engine
+      → engine checks ratio, picks strategy, runs GPU inference → upscaled array
+    → pipeline passes upscaled array to packager  
+      → packager encodes to JPEG bytes → writes into zip
+        → bytes are freed from memory
+```
+
+At no point does an intermediate file touch your disk. The only disk operations are: reading the source CBZ and writing the final CBZ. Everything else lives in RAM and GPU VRAM. That's why your 580MB temp folder disappears.
+
+## What's Different From Your MVP
+
+| MVP | New Architecture |
+|---|---|
+| One 180-line file | 5 focused files, each ~40-80 lines |
+| All images extracted to disk first | Images streamed from zip, one at a time |
+| Upscaled images written to temp folder, then re-zipped | Upscaled images encoded and written directly to zip |
+| Model config hardcoded in function | Config centralized, engine is reusable |
+| Adding a feature = surgery on one big file | Adding a feature = new code in the right module |
+
+What do you want to dig into first — should we start writing `config.py` and `engine.py` since they're the core, or do you have questions about any of these interfaces?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+blend = blend[:, np.newaxis, np.newaxis]  # shape: (256, 1, 1)
+```
+
+Numpy **broadcasting** automatically applies this across all columns and channels. So `blend[0]` (which is 0.0) 
+multiplies every pixel in the first row. `blend[128]` (which is 0.5) multiplies every pixel in the middle row. You don't need to loop through pixels individually.
+
+**The full stitch for two chunks:**
+```
+result = [
+    chunk_A top portion (everything ABOVE the overlap — no blending needed),
+    blended overlap zone,
+    chunk_B bottom portion (everything BELOW the overlap — no blending needed)
+]
+```
+
+For the overlap zone specifically, chunk A's bottom 256 rows get blended with chunk B's top 256 rows using that gradient.
+
+**For the first chunk:** No blending on top. Keep all of it except the bottom 128 rows (half the overlap) — those go into the blend zone with chunk 1.
+
+Actually, let me simplify. Think of it as building the result piece by piece:
+```
+Start with chunk 0's non-overlapping region
+For each pair of neighboring chunks:
+    Blend the overlap zone
+    Add the next chunk's non-overlapping region

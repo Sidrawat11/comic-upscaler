@@ -7,6 +7,7 @@ from realesrgan import RealESRGANer
 import cv2
 import torch
 import time
+import shutil
 
 ## Hard Code Directories
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -118,7 +119,6 @@ def upscale_Image(upsampler, scale, input_path, output_path):
         overlap_scaled = int(overlap * scale)
 
         if start_y > 0:
-
             cut_off = overlap_scaled // 2
             output = output[cut_off:, :]
 
@@ -126,7 +126,7 @@ def upscale_Image(upsampler, scale, input_path, output_path):
             cut_off_bottom = overlap_scaled // 2
             output = output[:-cut_off_bottom, :]
             
-        up_chunks.append(output)
+        up_chunks.append(final_output)
 
     final_img = np.concatenate(up_chunks, axis=0)
     cv2.imwrite(os.path.join(output_path), final_img)
@@ -175,27 +175,29 @@ def process_all_chapters(scale):
     state_dict = loadModel(net, loadnet)
     net.load_state_dict(state_dict, strict=False)
     net.eval().to('cuda')
-    upsampler = RealESRGANer(scale=4, model_path=MODEL_PATH, model=net, tile=0, tile_pad=10, pre_pad=0, half=False, gpu_id=0)
+    upsampler = RealESRGANer(scale=4, model_path=MODEL_PATH, model=net, tile=0, tile_pad=10, pre_pad=0, half=True, gpu_id=0)
+    upscale_Image(upsampler, scale, os.path.join(TEMP_EXTRACT, '001.jpg'), os.path.join(UPSCALED_DIR, '001.png'))
     total_start = time.time()
 
-    for f in cbz_files:
-        cbz_path = os.path.join(CHAPTER_FOLDER, f)
-        chapter_name = get_chapter_name(cbz_path)
-        chapter_temp_dir = os.path.join(UPSCALED_DIR, chapter_name + '_temp')
-        os.makedirs(chapter_temp_dir, exist_ok=True)
+    # for f in cbz_files:
+    #     cbz_path = os.path.join(CHAPTER_FOLDER, f)
+    #     chapter_name = get_chapter_name(cbz_path)
+    #     chapter_temp_dir = os.path.join(UPSCALED_DIR, chapter_name + '_temp')
+    #     os.makedirs(chapter_temp_dir, exist_ok=True)
 
-        chapter_start = time.time()
+    #     chapter_start = time.time()
 
-        process_chapter(cbz_path, scale, upsampler, chapter_temp_dir)
+    #     process_chapter(cbz_path, scale, upsampler, chapter_temp_dir)
 
-        output_cbz_path = os.path.join(UPSCALED_DIR, chapter_name + '_upscaled.cbz')
-        zip_to_cbz(chapter_temp_dir, output_cbz_path)
+    #     output_cbz_path = os.path.join(UPSCALED_DIR, chapter_name + '_upscaled.cbz')
+    #     zip_to_cbz(chapter_temp_dir, output_cbz_path)
+    #     shutil.rmtree(chapter_temp_dir)
 
-        chapter_time = time.time() - chapter_start
-        logging.info(f"Chapter {chapter_name} upscale time: {chapter_time:.2f} sec")
+    #     chapter_time = time.time() - chapter_start
+    #     logging.info(f"Chapter {chapter_name} upscale time: {chapter_time:.2f} sec")
 
-    total_time = time.time() - total_start
-    logging.info(f"Full run time for all chapters: {total_time:.2f} sec")
+    # total_time = time.time() - total_start
+    # logging.info(f"Full run time for all chapters: {total_time:.2f} sec")
         
 ## Zip the upscaled PNGs to CBZ
 def zip_to_cbz(chapter_temp_dir, output_cbz_path):

@@ -1,0 +1,29 @@
+"""
+Image extraction module for the ManwhaHDFyer pipeline.
+
+Handles reading CBZ archive files and extracting their contents as
+decoded image arrays for downstream processing.
+"""
+
+import zipfile
+import cv2
+import numpy as np
+
+def extract_images(cbz_path):
+    with zipfile.ZipFile(cbz_path) as z:
+        file_list = _get_image_names(z)
+        for name in file_list:
+            raw_bytes = z.read(name)
+            image = cv2.imdecode(np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR)
+            if image is None:
+                continue
+            yield name, image, raw_bytes
+
+def count_images(cbz_path):
+    with zipfile.ZipFile(cbz_path) as z:
+        return len(_get_image_names(z))
+
+def _get_image_names(z):
+    include_filter = ('.jpg', '.png', '.jpeg', '.webp')
+    exclude_filter = ('__MACOSX', '.')
+    return sorted([f for f in z.namelist() if f.endswith(include_filter) and not f.startswith(exclude_filter)])
