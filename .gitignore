@@ -6,6 +6,7 @@ __pycache__/
 *.pyd
 .python-version
 .DS_Store
+go.txt
 
 # Manhwa content - never commit
 The Legend of the Northern Blade/

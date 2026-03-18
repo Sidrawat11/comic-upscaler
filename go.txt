@@ -193,6 +193,6 @@ For the overlap zone specifically, chunk A's bottom 256 rows get blended with ch
 Actually, let me simplify. Think of it as building the result piece by piece:
 ```
 Start with chunk 0's non-overlapping region
-For each pair of neighboring chunks:
+For each pair of neighboring chun
     Blend the overlap zone
     Add the next chunk's non-overlapping region
