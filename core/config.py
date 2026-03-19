@@ -15,7 +15,7 @@ class EngineConfig:
     half: bool = True
     chunk_size: int = 720
     overlap: int = 128
-    ratio_threshold: float = 2.5
+    ratio_threshold: float = 4.0
     cudnn_benchmark: bool = True
     sharpen_strength: float = 0.3 
     sharpen_radius: float = 1.0
