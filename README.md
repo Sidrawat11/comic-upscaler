@@ -232,6 +232,7 @@ Started as a 180-line monolithic script (preserved in `legacy/mvp_upscaler.py`) 
 
 ## Roadmap
 
+### Completed
 - [x] MVP upscaler (proof of concept)
 - [x] Modular architecture (core/pipeline separation)
 - [x] Feathered blending for chunk stitching
@@ -239,13 +240,32 @@ Started as a 180-line monolithic script (preserved in `legacy/mvp_upscaler.py`) 
 - [x] Post-sharpen + black area fix
 - [x] Batch processing with resume
 - [x] Cloud GPU deployment
-- [ ] A GUI comparer to compare upscaled vs original.
+
+### In Progress
+- [ ] Desktop GUI comparer (Tauri + React)
+  - [ ] Side-by-side image comparison with slider
+  - [ ] Synchronized zoom and pan
+  - [ ] Drag-and-drop image loading
+  - [ ] Image metadata display (resolution, file size, format)
+  - [ ] Keyboard shortcuts
+
+### Up Next
+- [ ] Custom inference wrapper (replace Real-ESRGAN dependency)
 - [ ] Edge-aware sharpening (sharpen lines, preserve flat areas)
 - [ ] GPU batching (multiple images per inference call)
-- [ ] Write own inference wrapper (replace Real-ESRGAN dependency)
-- [ ] Reverse proxy for real-time Mihon integration
+
+### Future — Pipeline Features
+- [ ] Model selection (swap between different upscaling models)
+- [ ] Multiple sharpening algorithms (unsharp mask, Laplacian, bilateral, edge-aware)
+- [ ] Batch and single image mode through the GUI
+- [ ] Live config controls (sharpening strength, tile size, scale factor)
+- [ ] CPU inference fallback for users without a GPU
+
+### Future — Infrastructure
+- [ ] Reverse proxy for real-time Mihon integration (Suwayomi-based)
 - [ ] Queue-based processing with approval workflow
-- [ ] Support for multiple models (anime-specific, photo, etc.)
+- [ ] Cloud deployment automation
+- [ ] Support for multiple model architectures (anime-specific, photo, etc.)
 
 ---
 
