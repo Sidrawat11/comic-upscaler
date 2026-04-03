@@ -145,13 +145,13 @@ models/4x-UltraSharp.pth
 ### Basic — one chapter test
 
 ```bash
-python main.py --comic-folder "The Legend of the Northern Blade" --limit 1
+python main.py --comic-folder "Comic Name" --limit 1
 ```
 
 ### Full batch — all chapters
 
 ```bash
-python main.py --comic-folder "The Legend of the Northern Blade"
+python main.py --comic-folder "Comic Name"
 ```
 
 ### All options
