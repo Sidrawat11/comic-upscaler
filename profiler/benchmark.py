@@ -55,14 +55,14 @@ def get_lookup(width: int, height: int, benchmark_map: dict) -> dict:
 
     if matched_entry:
         if need_extrapolation:
-            matched_entry["max_batch_size"] = math.floor(matched_entry["max_batch_size"] * 0.75)
+            matched_entry["max_safe_batch_size"] = math.floor(matched_entry["max_safe_batch_size"] * 0.75)
         return matched_entry
 
     if max_height < height:
         max_entry = max(filtered_entries_by_width, key=lambda x: x["height"])
         entry = dict(max_entry)
         if max_entry["valid"]:
-            entry["max_batch_size"] = math.floor(entry["max_batch_size"] * 0.75)
+            entry["max_safe_batch_size"] = math.floor(entry["max_safe_batch_size"] * 0.75)
         return entry
     else:
         valid_entries = sorted([e for e in filtered_entries_by_width if e["valid"]], key=lambda x: x["height"])
