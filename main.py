@@ -6,6 +6,8 @@ from profiler.cache import cache_check, save_cache
 from profiler.scanner import scan_library
 from profiler.runner import run_profiler
 from profiler.benchmark import build_map, get_lookup
+import torch.backends.cudnn as cudnn
+cudnn.benchmark = True
 
 
 def run_profiler_pipeline():

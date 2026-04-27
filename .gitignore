@@ -16,6 +16,7 @@ docs/
 TempExtract/
 upscaled/
 Log/
+test/
 *.log
 
 # Big binaries & weights (we'll handle them separately)
