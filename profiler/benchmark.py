@@ -55,14 +55,14 @@ def get_lookup(width: int, height: int, benchmark_map: dict) -> dict:
 
     if matched_entry:
         if need_extrapolation:
-            matched_entry["max_safe_batch_size"] = math.floor(matched_entry["max_safe_batch_size"] * 0.75)
+            matched_entry["max_safe_batch_size"] = max(1, math.floor(matched_entry["max_safe_batch_size"] * 0.75))
         return matched_entry
 
     if max_height < height:
         max_entry = max(filtered_entries_by_width, key=lambda x: x["height"])
         entry = dict(max_entry)
         if max_entry["valid"]:
-            entry["max_safe_batch_size"] = math.floor(entry["max_safe_batch_size"] * 0.75)
+            entry["max_safe_batch_size"] = max(1, math.floor(entry["max_safe_batch_size"] * 0.75))
         return entry
     else:
         valid_entries = sorted([e for e in filtered_entries_by_width if e["valid"]], key=lambda x: x["height"])
@@ -71,17 +71,17 @@ def get_lookup(width: int, height: int, benchmark_map: dict) -> dict:
 
         if not lower:
             entry = dict(valid_entries[0])
-            entry["max_safe_batch_size"] = math.floor(entry["max_safe_batch_size"] * 0.9)
+            entry["max_safe_batch_size"] = max(1, math.floor(entry["max_safe_batch_size"] * 0.9))
             return entry
 
         if not upper:
             entry = dict(valid_entries[-1])
-            entry["max_safe_batch_size"] = math.floor(entry["max_safe_batch_size"] * 0.9)
+            entry["max_safe_batch_size"] = max(1, math.floor(entry["max_safe_batch_size"] * 0.9))
             return entry
 
         avg_time = (lower["avg_duration_ms"] + upper["avg_duration_ms"]) / 2
         avg_vram = (lower["peak_vram_mb"] + upper["peak_vram_mb"]) / 2
-        max_batch_size = math.floor(math.floor((available_vram_mb * 0.85) / avg_vram) * 0.9)
+        max_batch_size = max(1, math.floor(math.floor((available_vram_mb * 0.85) / avg_vram) * 0.9))
 
         return {
             "width": width,
@@ -91,3 +91,16 @@ def get_lookup(width: int, height: int, benchmark_map: dict) -> dict:
             "avg_duration_ms": avg_time,
             "max_safe_batch_size": max_batch_size,
         }
+
+
+def get_max_chunk_height(width: int, benchmark_map: dict) -> int:
+    """Returns the largest valid chunk height for the nearest profiled width, or 128 if none exist."""
+    widths_seen = benchmark_map["widths_seen"]
+    if width not in set(widths_seen):
+        width = min(widths_seen, key=lambda w: abs(w - width))
+
+    valid_entries = [e for e in benchmark_map["entries"] if e["width"] == width and e["valid"]]
+    if not valid_entries:
+        return 128
+
+    return max(e["height"] for e in valid_entries)
