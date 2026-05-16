@@ -15,6 +15,7 @@ DEFAULT_OVERLAP = 128
 
 @dataclass
 class ChunkMeta:
+    page_id: int
     page_slice: np.ndarray
     chunk_index: int
     total_chunks: int
@@ -23,7 +24,7 @@ class ChunkMeta:
     overlap_top: int
     overlap_bottom: int
 
-def chunk_page(image: np.ndarray, benchmark_map: dict, overlap=DEFAULT_OVERLAP) -> list[ChunkMeta]:
+def chunk_page(image: np.ndarray, page_id: int, benchmark_map: dict, overlap=DEFAULT_OVERLAP) -> list[ChunkMeta]:
     h, w = image.shape[:2]
 
     available_vram = benchmark_map["available_vram"]
@@ -32,8 +33,8 @@ def chunk_page(image: np.ndarray, benchmark_map: dict, overlap=DEFAULT_OVERLAP) 
 
     # Pre-flight Check if the full page fits in the upscaler no chunking required.
     if estimated_vram < available_vram * 0.75:
-        return [ChunkMeta(image, 0, 1, 0, h, 0, 0)]
-    
+        return [ChunkMeta(page_id, image, 0, 1, 0, h, 0, 0)]
+
     max_chunk_height = get_max_chunk_height(w, benchmark_map)
     ch_index = 0
     y_start = 0
@@ -43,15 +44,15 @@ def chunk_page(image: np.ndarray, benchmark_map: dict, overlap=DEFAULT_OVERLAP) 
         overlap_top = DEFAULT_OVERLAP if y_start > 0 else 0
         if y_end > h:
             chunk = image[y_start:,:]
-            results.append(ChunkMeta(chunk, ch_index, 0, y_start, h, overlap_top, 0))
+            results.append(ChunkMeta(page_id, chunk, ch_index, 0, y_start, h, overlap_top, 0))
             break
 
         chunk = image[y_start : y_end, :]
 
         if y_start == 0:
-            results.append(ChunkMeta(chunk, ch_index, 0, y_start, y_end, 0, DEFAULT_OVERLAP))
+            results.append(ChunkMeta(page_id, chunk, ch_index, 0, y_start, y_end, 0, DEFAULT_OVERLAP))
         else:
-            results.append(ChunkMeta(chunk, ch_index, 0, y_start, y_end, overlap_top, DEFAULT_OVERLAP))
+            results.append(ChunkMeta(page_id, chunk, ch_index, 0, y_start, y_end, overlap_top, DEFAULT_OVERLAP))
         
         y_start = y_end - DEFAULT_OVERLAP
         ch_index += 1
