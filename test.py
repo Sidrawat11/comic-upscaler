@@ -14,7 +14,7 @@ print(f"Full image: {image.shape}")
 
 benchmark_map = load_cache()
 
-chunks = chunk_page(image, benchmark_map)
+chunks = chunk_page(image, 0, benchmark_map)
 print(f"Total chunks: {len(chunks)}")
 
 for c in chunks:
