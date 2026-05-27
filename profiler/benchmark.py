@@ -94,13 +94,10 @@ def get_lookup(width: int, height: int, benchmark_map: dict) -> dict:
 
 
 def get_max_chunk_height(width: int, benchmark_map: dict) -> int:
-    """Returns the largest valid chunk height for the nearest profiled width, or 128 if none exist."""
+    """Returns the largest safe chunk height for the given width using a formula derived from VRAM headroom."""
     widths_seen = benchmark_map["widths_seen"]
     if width not in set(widths_seen):
         width = min(widths_seen, key=lambda w: abs(w - width))
 
-    valid_entries = [e for e in benchmark_map["entries"] if e["width"] == width and e["valid"]]
-    if not valid_entries:
-        return 128
-
-    return max(e["height"] for e in valid_entries)
+    available_vram = benchmark_map["available_vram"]
+    return int((available_vram * 0.75 - 32.1) / (0.0085 * width))

@@ -1,12 +1,23 @@
-import argparse
-from core import config
-from pipeline import batch as b
+import cv2
+import time
+import torch
+from tqdm import tqdm
+import torch.backends.cudnn as cudnn
 from pathlib import Path
-from profiler.cache import cache_check, save_cache
+from core import extractor
+from core.model_loader import load_rrdbnet
+from core.packager import Packager
+from pipeline.page_buffer import PageBuffer
+from profiler.cache import cache_check, save_cache, load_cache
 from profiler.scanner import scan_library
 from profiler.runner import run_profiler
 from profiler.benchmark import build_map, get_lookup
-import torch.backends.cudnn as cudnn
+from inference.chunker import chunk_page
+from inference.batcher import build_batches
+from inference.engine import batch_upscale
+from postprocessing.sharpen import sharpen
+from postprocessing.cleanup import cleanup_near_black
+
 cudnn.benchmark = True
 
 
@@ -37,35 +48,73 @@ def run_profiler_pipeline():
         print(f"  {w}x{h} -> {result}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Manwha HD Upscaler MVP")
+def process_chapter_v2(cbz_path: Path, model: torch.nn.Module, benchmark_map: dict, output_path: Path, scale: int = 4):
+    print(f"Loading pages from {cbz_path}...")
+    pages = []
+    page_names = {}
+    for page_id, (name, image, _) in enumerate(extractor.extract_images(cbz_path)):
+        pages.append(image)
+        page_names[page_id] = name
+    print(f"Loaded {len(pages)} pages.")
 
-    parser.add_argument('--comic-folder', type = str, help = "Path to the comic")
-    parser.add_argument('--scale', type = int, default = 2, help = "Upscale factor (2 or 4)")
-    parser.add_argument('--format', type = str, default='jpg', help="Extenstion to save images in")
-    parser.add_argument('--quality', type = int, default = 92, help="JPG save quality default 92")
-    parser.add_argument('--limit', type=int, default=0, help="Number of chapters to upscale, Default 0 means all.")
+    print("Chunking pages...")
+    all_chunks = []
+    for page_id, image in enumerate(pages):
+        all_chunks.extend(chunk_page(image, page_id, benchmark_map))
+    print(f"Total chunks: {len(all_chunks)}")
 
-    args = parser.parse_args()
+    batches = build_batches(all_chunks, benchmark_map)
+    print(f"Total batches: {len(batches)}")
 
-    output_config = config.OutputConfig(
-        format=args.format,
-        quality=args.quality,
-        limit=args.limit
-    )
+    page_buffer = PageBuffer(scale)
+    with Packager(output_path, 'jpg', 92) as packager:
+        for batch in tqdm(batches, desc="Upscaling batches"):
+            results = batch_upscale(batch, model, scale)
+            for upscaled_array, meta in results:
+                completed_page = page_buffer.add(upscaled_array, meta)
+                if completed_page is not None:
+                    completed_page = sharpen(completed_page)
+                    completed_page = cleanup_near_black(completed_page)
+                    h, w = completed_page.shape[:2]
+                    completed_page = cv2.resize(completed_page, (w // 2, h // 2), interpolation=cv2.INTER_LANCZOS4)
+                    packager.add_image(page_names[meta.page_id], completed_page)
 
-    engine_config = config.EngineConfig(
-        scale=args.scale,
-    )
+    print(f"Output written to {output_path}")
 
-    directory_config = config.DirectoryConfig(
-        manwha_dir=Path(args.comic_folder)
-    )
 
-    pipeline = config.PipelineConfig(dirs=directory_config, engine=engine_config, output=output_config)
+def process_all(manwha_dir: Path, output_dir: Path, model_path: Path, scale: int = 4):
+    print("Loading model...")
+    model = load_rrdbnet(model_path)
 
-    b.process_all_chapters(folder_path=Path(args.comic_folder), pipeline=pipeline)
+    print("Loading benchmark map...")
+    benchmark_map = load_cache()
+
+    cbz_files = sorted(manwha_dir.rglob("*.cbz"))
+    print(f"Found {len(cbz_files)} chapters.")
+
+    total_start = time.perf_counter()
+    completed = 0
+
+    for cbz_path in tqdm(cbz_files, desc="Processing chapters"):
+        relative = cbz_path.relative_to(manwha_dir)
+        output_path = output_dir / relative
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if output_path.exists():
+            tqdm.write(f"Skipping, already processed: {relative}")
+            continue
+
+        chapter_start = time.perf_counter()
+        process_chapter_v2(cbz_path, model, benchmark_map, output_path, scale)
+        completed += 1
+        elapsed = time.perf_counter() - chapter_start
+        tqdm.write(f"Done: {relative} in {elapsed:.1f}s")
+
+    total_elapsed = time.perf_counter() - total_start
+    avg = total_elapsed / completed if completed else 0
+    print(f"\nFinished {completed} chapters in {total_elapsed:.0f}s ({total_elapsed / 60:.1f} min), avg {avg:.1f}s/chapter.")
+
 
 if __name__ == "__main__":
     run_profiler_pipeline()
-    ##main()
+    process_all(Path("Manwhas"), Path("results"), Path("models/4x-UltraSharp.pth"))

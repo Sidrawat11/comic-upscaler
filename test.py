@@ -1,28 +1,21 @@
 """Standalone test: slice one 693x512 chunk from a test page and upscale it."""
 
+"""Test chunker against the 690x4363 test page."""
+
 import cv2
 from pathlib import Path
-from core.model_loader import load_rrdbnet
-from inference.engine import upscale
+from profiler.cache import load_cache
+from profiler.benchmark import get_max_chunk_height
+from inference.chunker import chunk_page
 
-model_path = Path("models/4x-UltraSharp.pth")
 test_image_path = Path("test/060__001.jpg")
-
-print("Loading model...")
-model = load_rrdbnet(model_path)
-
-print("Reading test image...")
 image = cv2.imread(str(test_image_path))
-print(f"Full image shape: {image.shape}")
+print(f"Full image: {image.shape}")
 
-# Take first 512 rows — 693x512 is within VRAM budget
-chunk = image[-512:, :]
-print(f"Chunk shape: {chunk.shape}")
+benchmark_map = load_cache()
 
-print("Upscaling...")
-result = upscale(chunk, model, scale=4)
-print(f"Output shape: {result.shape}")
+chunks = chunk_page(image, benchmark_map)
+print(f"Total chunks: {len(chunks)}")
 
-output_path = Path("test/output_chunk_test.png")
-cv2.imwrite(str(output_path), result)
-print(f"Saved to {output_path}")
+for c in chunks:
+    print(f"  Chunk {c.chunk_index}: y={c.y_start}->{c.y_end}, shape={c.page_slice.shape}, overlap_top={c.overlap_top}, overlap_bottom={c.overlap_bottom}")

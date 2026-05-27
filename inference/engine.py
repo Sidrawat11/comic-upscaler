@@ -11,6 +11,7 @@ import torch.nn.functional as F
 import cv2
 from core.model_loader import load_rrdbnet
 from pathlib import Path
+from inference.chunker import ChunkMeta
 
 DEVICE = torch.device('cuda')
 DTYPE = torch.float16
@@ -69,3 +70,28 @@ def upscale(image: np.ndarray, model: torch.nn.Module, scale: int = 4) -> np.nda
     y_unpadded = _unpad(y, pad_h, pad_w, scale)
     img = _postprocess(y_unpadded)
     return img
+
+
+def batch_upscale(chunks: list[ChunkMeta], model: torch.nn.Module, scale: int = 4) -> list[tuple[np.ndarray, ChunkMeta]]:
+    """
+    Upscales a batch of same-shape chunks in a single forward pass. 
+    Preprocesses each chunk, concatenates into one tensor, runs model once, splits and postprocesses each result.
+    Returns paired upscaled arrays and their ChunkMetas.
+    """
+    preprocessed_chunks = []
+    for chunk in chunks:
+        tensor = _preprocess(chunk.page_slice)
+        preprocessed_chunks.append(tensor)
+
+    concated_chunks = torch.cat(preprocessed_chunks)
+    chunks_padded, pad_h, pad_w = _pad(concated_chunks, scale)
+    with torch.no_grad():
+        upscaled = model(chunks_padded)
+    upscaled_unpadded = _unpad(upscaled, pad_h, pad_w, scale)
+
+    individual = torch.split(upscaled_unpadded, 1, dim=0)
+    results = []
+    for tensor, meta in zip(individual, chunks):
+        results.append((_postprocess(tensor), meta))
+
+    return results

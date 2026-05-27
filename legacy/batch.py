@@ -1,6 +1,7 @@
 """Batch pipeline for upscaling all CBZ chapters in a directory."""
 
-from core import engine as en, config, extractor, packager
+from legacy import engine as en
+from core import config, extractor, packager
 import os
 from pathlib import Path
 import logging
